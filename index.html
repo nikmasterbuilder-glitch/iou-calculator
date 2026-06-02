@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IoU Calculator</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d0d0d; --surface: #161616; --surface2: #1f1f1f; --border: #2a2a2a;
+    --text: #f0ede8; --muted: #6b6b6b; --accent: #c8ff57; --accent-dark: #9acc3e;
+    --mono: 'IBM Plex Mono', monospace; --sans: 'IBM Plex Sans', sans-serif;
+  }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 3rem 1.5rem 4rem; }
+  header { text-align: center; margin-bottom: 2.5rem; }
+  .tag { font-family: var(--mono); font-size: 11px; letter-spacing: 0.15em; color: var(--accent); text-transform: uppercase; margin-bottom: 0.75rem; }
+  h1 { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+  h1 span { color: var(--accent); }
+  header p { margin-top: 0.75rem; color: var(--muted); font-size: 14px; max-width: 460px; line-height: 1.6; margin-left: auto; margin-right: auto; }
+  .main { width: 100%; max-width: 940px; display: flex; flex-direction: column; gap: 1.5rem; }
+
+  .mode-toggle { display: flex; align-items: center; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px; width: fit-content; align-self: center; }
+  .mode-btn { font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; padding: 7px 16px; border-radius: 7px; border: none; cursor: pointer; background: transparent; color: var(--muted); transition: all 0.2s; white-space: nowrap; }
+  .mode-btn.active { background: var(--accent); color: #0d0d0d; font-weight: 500; }
+
+  .mode-desc { font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: center; line-height: 1.6; padding: 0.25rem 0; }
+
+  .drop-row { display: grid; gap: 1rem; }
+  .col2 { grid-template-columns: 1fr 1fr; }
+  .col3 { grid-template-columns: 1fr 1fr 1fr; }
+
+  .drop-zone { border: 1.5px dashed var(--border); border-radius: 12px; background: var(--surface); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; cursor: pointer; transition: border-color 0.2s, background 0.2s; position: relative; overflow: hidden; min-height: 170px; padding: 1.5rem; }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: #1a1f10; }
+  .drop-icon { font-size: 26px; color: var(--muted); }
+  .drop-label { font-size: 12px; color: var(--muted); text-align: center; line-height: 1.5; }
+  .drop-label strong { display: block; color: var(--text); font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+  .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .drop-zone canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; border-radius: 10px; }
+
+  .badge { position: absolute; top: 10px; left: 10px; font-family: var(--mono); font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 4px; letter-spacing: 0.05em; z-index: 2; }
+  .badge-a { background: rgba(99,180,255,0.2); color: #63b4ff; border: 1px solid rgba(99,180,255,0.3); }
+  .badge-b { background: rgba(255,120,90,0.2); color: #ff785a; border: 1px solid rgba(255,120,90,0.3); }
+  .badge-base { background: rgba(180,180,180,0.15); color: #aaa; border: 1px solid rgba(180,180,180,0.2); }
+
+  .controls { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+  .slider-row { display: flex; align-items: center; gap: 12px; }
+  .slider-row label { font-size: 13px; color: var(--muted); font-family: var(--mono); min-width: 165px; }
+  input[type="range"] { flex: 1; appearance: none; height: 4px; border-radius: 2px; background: var(--border); outline: none; cursor: pointer; }
+  input[type="range"]::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+  .slider-val { font-family: var(--mono); font-size: 13px; color: var(--accent); min-width: 48px; text-align: right; }
+  .tip { font-size: 12px; color: var(--muted); font-family: var(--mono); line-height: 1.7; }
+
+  .compute-btn { background: var(--accent); color: #0d0d0d; border: none; border-radius: 8px; font-family: var(--sans); font-size: 15px; font-weight: 600; padding: 0.75rem 2rem; cursor: pointer; transition: background 0.15s, transform 0.1s; width: 100%; }
+  .compute-btn:hover { background: var(--accent-dark); }
+  .compute-btn:active { transform: scale(0.98); }
+  .compute-btn:disabled { background: var(--surface2); color: var(--muted); cursor: not-allowed; }
+
+  .result-grid { display: grid; gap: 1rem; }
+  .cols3 { grid-template-columns: 1fr 1fr 1fr; }
+  .cols4 { grid-template-columns: repeat(4, 1fr); }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.1rem 1.25rem; display: flex; flex-direction: column; gap: 5px; }
+  .stat-card.highlight { border-color: var(--accent); background: #141a0a; }
+  .stat-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; }
+  .stat-val { font-size: 1.9rem; font-weight: 600; font-family: var(--mono); letter-spacing: -0.02em; color: var(--text); line-height: 1; }
+  .stat-card.highlight .stat-val { color: var(--accent); }
+  .bar-wrap { height: 6px; background: var(--border); border-radius: 3px; margin-top: 6px; overflow: hidden; }
+  .bar-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); width: 0%; }
+
+  .overlay-section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .overlay-header { padding: 0.75rem 1.5rem; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  #overlay-canvas { display: block; width: 100%; height: auto; max-height: 500px; object-fit: contain; }
+
+  .error-msg { display: none; background: rgba(255,80,80,0.1); border: 1px solid rgba(255,80,80,0.3); border-radius: 8px; padding: 0.75rem 1rem; font-size: 13px; color: #ff8080; font-family: var(--mono); }
+
+  @media (max-width: 650px) {
+    .col2, .col3, .cols3, .cols4 { grid-template-columns: 1fr; }
+    .mode-btn { font-size: 10px; padding: 6px 10px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="tag">Computer Vision Tool</div>
+  <h1>IoU <span>Calculator</span></h1>
+  <p>Three modes: binary masks, annotated image overlap (IoU), or circle center matching via Euclidean distance.</p>
+</header>
+
+<div class="main">
+
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="btn-mask"       onclick="setMode('mask')">MASK MODE</button>
+    <button class="mode-btn"        id="btn-annotated"  onclick="setMode('annotated')">ANNOTATED IoU</button>
+    <button class="mode-btn"        id="btn-center"     onclick="setMode('center')">CENTER MATCH</button>
+  </div>
+
+  <div class="mode-desc" id="mode-desc">Upload two binary masks — pixels above threshold count as foreground.</div>
+
+  <!-- ── MASK MODE ── -->
+  <div id="panel-mask">
+    <div class="drop-row col2">
+      <div class="drop-zone" id="zone-a">
+        <span class="badge badge-a">MASK A</span>
+        <input type="file" accept="image/*" id="file-a">
+        <div class="drop-icon">⬆</div>
+        <div class="drop-label"><strong>Drop Mask A</strong>Click or drag</div>
+        <canvas id="preview-a" style="display:none"></canvas>
+      </div>
+      <div class="drop-zone" id="zone-b">
+        <span class="badge badge-b">MASK B</span>
+        <input type="file" accept="image/*" id="file-b">
+        <div class="drop-icon">⬆</div>
+        <div class="drop-label"><strong>Drop Mask B</strong>Click or drag</div>
+        <canvas id="preview-b" style="display:none"></canvas>
+      </div>
+    </div>
+    <div class="controls" style="margin-top:1rem">
+      <div class="slider-row">
+        <label>threshold</label>
+        <input type="range" id="threshold" min="0" max="255" value="128" step="1">
+        <span class="slider-val" id="threshold-val">128</span>
+      </div>
+      <div class="tip">Pixels above threshold = foreground. Adjust if masks look wrong.</div>
+    </div>
+  </div>
+
+  <!-- ── ANNOTATED IoU MODE ── -->
+  <div id="panel-annotated" style="display:none">
+    <div class="drop-row col3">
+      <div class="drop-zone" id="zone-base-iou">
+        <span class="badge badge-base">BASE</span>
+        <input type="file" accept="image/*" id="file-base-iou">
+        <div class="drop-icon">⬆</div>
+        <div class="drop-label"><strong>Clean Base Image</strong>No circles</div>
+        <canvas id="preview-base-iou" style="display:none"></canvas>
+      </div>
+      <div class="drop-zone" id="zone-ann-a-iou">
+        <span class="badge badge-a">ANNOTATION 1</span>
+        <input type="file" accept="image/*" id="file-ann-a-iou">
+        <div class="drop-icon">⬆</div>
+        <div class="drop-label"><strong>Annotated Image 1</strong>Base + circles</div>
+        <canvas id="preview-ann-a-iou" style="display:none"></canvas>
+      </div>
+      <div class="drop-zone" id="zone-ann-b-iou">
+        <span class="badge badge-b">ANNOTATION 2</span>
+        <input type="file" accept="image/*" id="file-ann-b-iou">
+        <div class="drop-icon">⬆</div>
+        <div class="drop-label"><strong>Annotated Image 2</strong>Base + circles</div>
+        <canvas id="preview-ann-b-iou" style="display:none"></canvas>
+      </div>
+    </div>
+    <div class="controls" style="margin-top:1rem">
+      <div class="slider-row">
+        <label>diff sensitivity</label>
+        <input type="range" id="diff-thresh-iou" min="5" max="80" value="20" step="1">
+        <span class="slider-val" id="diff-thresh-iou-val">20</span>
+      </div>
+      <div class="slider-row">
+        <label>fill radius (px)</label>
+        <input type="range" id="fill-radius" min="1" max="20" value="6" step="1">
+        <span class="slider-val" id="fill-radius-val">6</span>
+      </div>
+      <div class="tip">Diff sensitivity: how different a pixel must be from base to count as a mark.<br>Fill radius: expands thin strokes into filled regions so IoU works correctly.</div>
+    </div>
+  </div>
+
+  <!-- ── CENTER MATCH MODE ── -->
+  <div id="panel-center" style="display:none">
+    <div class="drop-row col3">
+      <div class="drop-zone" id="zone-base-cm">
+        <span class="badge badge-base">BASE</span>
+        <input type="file" accept="image/*" id="file-base-cm">
+        <div class="drop-icon">⬆</div>
+        <div class="drop-label"><strong>Clean Base Image</strong>No circles</div>
+        <canvas id="preview-base-cm" style="display:none"></canvas>
+      </div>
+      <div class="drop-zone" id="zone-ann-a-cm">
+        <span class="badge badge-a">ANNOTATION 1</span>
+        <input type="file" accept="image/*" id="file-ann-a-cm">
+        <div class="drop-icon">⬆</div>
+        <div class="drop-label"><strong>Annotated Image 1</strong>Base + circles</div>
+        <canvas id="preview-ann-a-cm" style="display:none"></canvas>
+      </div>
+      <div class="drop-zone" id="zone-ann-b-cm">
+        <span class="badge badge-b">ANNOTATION 2</span>
+        <input type="file" accept="image/*" id="file-ann-b-cm">
+        <div class="drop-icon">⬆</div>
+        <div class="drop-label"><strong>Annotated Image 2</strong>Base + circles</div>
+        <canvas id="preview-ann-b-cm" style="display:none"></canvas>
+      </div>
+    </div>
+    <div class="controls" style="margin-top:1rem">
+      <div class="slider-row">
+        <label>diff sensitivity</label>
+        <input type="range" id="diff-thresh-cm" min="5" max="80" value="20" step="1">
+        <span class="slider-val" id="diff-thresh-cm-val">20</span>
+      </div>
+      <div class="slider-row">
+        <label>match distance (px)</label>
+        <input type="range" id="match-dist" min="5" max="150" value="30" step="1">
+        <span class="slider-val" id="match-dist-val">30 px</span>
+      </div>
+      <div class="tip">Match distance: max center-to-center distance for two circles to count as the same cell.<br>Circle size doesn't affect the score — only center location matters.</div>
+    </div>
+  </div>
+
+  <div class="error-msg" id="error-msg"></div>
+  <button class="compute-btn" id="compute-btn" disabled>Upload images to compute</button>
+
+  <!-- RESULTS — IoU/Mask -->
+  <div class="result-grid cols3" id="result-iou" style="display:none">
+    <div class="stat-card highlight">
+      <div class="stat-label">IoU Score</div>
+      <div class="stat-val" id="stat-iou">—</div>
+      <div class="bar-wrap"><div class="bar-fill" id="iou-bar"></div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Intersection</div>
+      <div class="stat-val" id="stat-intersection">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Union</div>
+      <div class="stat-val" id="stat-union">—</div>
+    </div>
+  </div>
+
+  <!-- RESULTS — Center Match -->
+  <div class="result-grid cols4" id="result-cm" style="display:none">
+    <div class="stat-card highlight">
+      <div class="stat-label">Match Rate</div>
+      <div class="stat-val" id="stat-match">—</div>
+      <div class="bar-wrap"><div class="bar-fill" id="match-bar"></div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Avg Distance</div>
+      <div class="stat-val" id="stat-dist">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Circles 1 / 2</div>
+      <div class="stat-val" id="stat-counts">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Unmatched</div>
+      <div class="stat-val" id="stat-unmatched">—</div>
+    </div>
+  </div>
+
+  <div class="overlay-section" id="overlay-section" style="display:none">
+    <div class="overlay-header" id="overlay-header">
+      Overlap Visualization
+    </div>
+    <canvas id="overlay-canvas"></canvas>
+  </div>
+
+</div>
+
+<script>
+  let mode = 'mask';
+  let imgs = {};
+
+  const computeBtn = document.getElementById('compute-btn');
+  const errorMsg   = document.getElementById('error-msg');
+  const overlayCanvas = document.getElementById('overlay-canvas');
+
+  const modeDescs = {
+    mask:       'Upload two binary masks — pixels above threshold count as foreground.',
+    annotated:  'Upload a clean base image + two annotated versions. Tool diffs out the base to isolate circle marks, then computes IoU.',
+    center:     'Detects each circle\'s center and matches them by proximity. Size differences don\'t affect the score.'
+  };
+
+  const readyCheck = {
+    mask:      () => imgs.a && imgs.b,
+    annotated: () => imgs.baseIou && imgs.annAIou && imgs.annBIou,
+    center:    () => imgs.baseCm && imgs.annACm && imgs.annBCm
+  };
+
+  const btnLabels = {
+    mask:      ['Upload both masks to compute IoU', 'Compute IoU →'],
+    annotated: ['Upload all 3 images to compute', 'Compute IoU →'],
+    center:    ['Upload all 3 images to compute', 'Compute Center Match →']
+  };
+
+  function setMode(m) {
+    mode = m;
+    ['mask','annotated','center'].forEach(x => {
+      document.getElementById('panel-' + (x === 'annotated' ? 'annotated' : x === 'center' ? 'center' : 'mask')).style.display = x === m ? 'block' : 'none';
+      document.getElementById('btn-' + (x === 'annotated' ? 'annotated' : x === 'center' ? 'center' : 'mask')).classList.toggle('active', x === m);
+    });
+    document.getElementById('mode-desc').textContent = modeDescs[m];
+    document.getElementById('result-iou').style.display = 'none';
+    document.getElementById('result-cm').style.display = 'none';
+    document.getElementById('overlay-section').style.display = 'none';
+    errorMsg.style.display = 'none';
+    updateBtn();
+  }
+
+  function updateBtn() {
+    const ready = readyCheck[mode]();
+    computeBtn.disabled = !ready;
+    computeBtn.textContent = btnLabels[mode][ready ? 1 : 0];
+  }
+
+  // Slider wiring
+  const sliders = [
+    ['threshold','threshold-val', v => v],
+    ['diff-thresh-iou','diff-thresh-iou-val', v => v],
+    ['fill-radius','fill-radius-val', v => v],
+    ['diff-thresh-cm','diff-thresh-cm-val', v => v],
+    ['match-dist','match-dist-val', v => v + ' px']
+  ];
+  sliders.forEach(([id, outId, fmt]) => {
+    document.getElementById(id).addEventListener('input', e => {
+      document.getElementById(outId).textContent = fmt(e.target.value);
+    });
+  });
+
+  function loadImage(file, cb) {
+    const r = new FileReader();
+    r.onload = e => { const img = new Image(); img.onload = () => cb(img); img.src = e.target.result; };
+    r.readAsDataURL(file);
+  }
+
+  function drawPreview(img, canvasId, zoneId) {
+    const zone = document.getElementById(zoneId);
+    const canvas = document.getElementById(canvasId);
+    const W = zone.clientWidth || 270, H = zone.clientHeight || 170;
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    const scale = Math.min(W / img.width, H / img.height);
+    ctx.clearRect(0, 0, W, H);
+    ctx.drawImage(img, (W - img.width*scale)/2, (H - img.height*scale)/2, img.width*scale, img.height*scale);
+    canvas.style.display = 'block';
+    zone.querySelector('.drop-icon').style.display = 'none';
+    zone.querySelector('.drop-label').style.display = 'none';
+  }
+
+  function setupZone(fileId, zoneId, canvasId, key) {
+    const fileEl = document.getElementById(fileId);
+    const zone   = document.getElementById(zoneId);
+    fileEl.addEventListener('change', e => {
+      if (e.target.files[0]) loadImage(e.target.files[0], img => { imgs[key] = img; drawPreview(img, canvasId, zoneId); updateBtn(); });
+    });
+    ['dragover','dragleave','drop'].forEach(ev => {
+      zone.addEventListener(ev, e => {
+        e.preventDefault();
+        if (ev === 'dragover') zone.classList.add('drag-over');
+        else zone.classList.remove('drag-over');
+        if (ev === 'drop' && e.dataTransfer.files[0]) {
+          loadImage(e.dataTransfer.files[0], img => { imgs[key] = img; drawPreview(img, canvasId, zoneId); updateBtn(); });
+        }
+      });
+    });
+  }
+
+  setupZone('file-a',          'zone-a',          'preview-a',          'a');
+  setupZone('file-b',          'zone-b',           'preview-b',          'b');
+  setupZone('file-base-iou',   'zone-base-iou',    'preview-base-iou',   'baseIou');
+  setupZone('file-ann-a-iou',  'zone-ann-a-iou',   'preview-ann-a-iou',  'annAIou');
+  setupZone('file-ann-b-iou',  'zone-ann-b-iou',   'preview-ann-b-iou',  'annBIou');
+  setupZone('file-base-cm',    'zone-base-cm',     'preview-base-cm',    'baseCm');
+  setupZone('file-ann-a-cm',   'zone-ann-a-cm',    'preview-ann-a-cm',   'annACm');
+  setupZone('file-ann-b-cm',   'zone-ann-b-cm',    'preview-ann-b-cm',   'annBCm');
+
+  // ── Helpers ──
+  function getPixels(img, W, H) {
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    c.getContext('2d').drawImage(img, 0, 0, W, H);
+    return c.getContext('2d').getImageData(0, 0, W, H).data;
+  }
+
+  function thresholdMask(img, W, H, thresh) {
+    const d = getPixels(img, W, H);
+    const m = new Uint8Array(W * H);
+    for (let i = 0; i < W*H; i++) {
+      m[i] = (0.299*d[i*4] + 0.587*d[i*4+1] + 0.114*d[i*4+2]) > thresh ? 1 : 0;
+    }
+    return m;
+  }
+
+  function diffMask(baseImg, annImg, W, H, diffThresh) {
+    const b = getPixels(baseImg, W, H);
+    const a = getPixels(annImg, W, H);
+    const m = new Uint8Array(W * H);
+    for (let i = 0; i < W*H; i++) {
+      m[i] = (Math.abs(a[i*4]-b[i*4]) + Math.abs(a[i*4+1]-b[i*4+1]) + Math.abs(a[i*4+2]-b[i*4+2])) > diffThresh ? 1 : 0;
+    }
+    return m;
+  }
+
+  function dilateMask(mask, W, H, r) {
+    const out = new Uint8Array(W * H), r2 = r*r;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (!mask[y*W+x]) continue;
+      for (let ny = Math.max(0,y-r); ny <= Math.min(H-1,y+r); ny++)
+        for (let nx = Math.max(0,x-r); nx <= Math.min(W-1,x+r); nx++)
+          if ((ny-y)**2+(nx-x)**2 <= r2) out[ny*W+nx] = 1;
+    }
+    return out;
+  }
+
+  function computeIoU(mA, mB, N) {
+    let inter = 0, uni = 0;
+    for (let i = 0; i < N; i++) { if (mA[i]&&mB[i]) inter++; if (mA[i]||mB[i]) uni++; }
+    return { inter, uni, iou: uni ? inter/uni : 0 };
+  }
+
+  function fmt(n) {
+    return n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'K' : n.toString();
+  }
+
+  function findBlobs(mask, W, H) {
+    const labels = new Int32Array(W*H);
+    let next = 1;
+    const stack = [];
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const idx = y*W+x;
+      if (!mask[idx] || labels[idx]) continue;
+      labels[idx] = next;
+      stack.push(idx);
+      while (stack.length) {
+        const cur = stack.pop();
+        const cx = cur%W, cy = (cur/W)|0;
+        for (const n of [cy>0?cur-W:-1, cy<H-1?cur+W:-1, cx>0?cur-1:-1, cx<W-1?cur+1:-1]) {
+          if (n>=0 && mask[n]===1 && !labels[n]) { labels[n]=next; stack.push(n); }
+        }
+      }
+      next++;
+    }
+    const blobs = {};
+    for (let i = 0; i < W*H; i++) {
+      const l = labels[i]; if (!l) continue;
+      if (!blobs[l]) blobs[l] = {sx:0,sy:0,n:0};
+      blobs[l].sx += i%W; blobs[l].sy += (i/W)|0; blobs[l].n++;
+    }
+    return Object.values(blobs).filter(b=>b.n>=8).map(b=>({x:b.sx/b.n, y:b.sy/b.n, size:b.n}));
+  }
+
+  function matchCenters(cA, cB, maxD) {
+    const matched = [], usedB = new Set();
+    for (const a of cA) {
+      let best=null, bestD=Infinity;
+      for (let j=0; j<cB.length; j++) {
+        if (usedB.has(j)) continue;
+        const d = Math.hypot(a.x-cB[j].x, a.y-cB[j].y);
+        if (d<bestD && d<=maxD) { bestD=d; best=j; }
+      }
+      if (best!==null) { matched.push({a, b:cB[best], d:bestD}); usedB.add(best); }
+    }
+    return {
+      matched,
+      unmatchedA: cA.filter(a => !matched.some(m=>m.a===a)),
+      unmatchedB: cB.filter((_,j) => !usedB.has(j))
+    };
+  }
+
+  // ── Draw overlays ──
+  function drawIoUOverlay(mA, mB, W, H, baseImg) {
+    overlayCanvas.width = W; overlayCanvas.height = H;
+    const ctx = overlayCanvas.getContext('2d');
+    if (baseImg) { ctx.drawImage(baseImg,0,0,W,H); } else { ctx.fillStyle='#141414'; ctx.fillRect(0,0,W,H); }
+    const out = ctx.createImageData(W,H);
+    for (let i=0; i<W*H; i++) {
+      const idx=i*4;
+      if (mA[i]&&mB[i])      { out.data[idx]=200;out.data[idx+1]=255;out.data[idx+2]=87; out.data[idx+3]=210; }
+      else if (mA[i])         { out.data[idx]=99; out.data[idx+1]=180;out.data[idx+2]=255;out.data[idx+3]=180; }
+      else if (mB[i])         { out.data[idx]=255;out.data[idx+1]=120;out.data[idx+2]=90; out.data[idx+3]=180; }
+      else                    { out.data[idx+3]=0; }
+    }
+    const tmp=document.createElement('canvas'); tmp.width=W; tmp.height=H;
+    tmp.getContext('2d').putImageData(out,0,0);
+    ctx.drawImage(tmp,0,0);
+
+    document.getElementById('overlay-header').innerHTML = `
+      Overlap Visualization
+      <span class="legend-item"><span class="legend-dot" style="background:rgba(99,180,255,0.9)"></span>Annotation 1 only</span>
+      <span class="legend-item"><span class="legend-dot" style="background:rgba(255,120,90,0.9)"></span>Annotation 2 only</span>
+      <span class="legend-item"><span class="legend-dot" style="background:rgba(200,255,87,0.9)"></span>Intersection</span>`;
+  }
+
+  function drawCenterOverlay(W, H, matched, unmatchedA, unmatchedB, baseImg) {
+    overlayCanvas.width=W; overlayCanvas.height=H;
+    const ctx=overlayCanvas.getContext('2d');
+    ctx.drawImage(baseImg,0,0,W,H);
+    ctx.globalAlpha=0.45; ctx.fillStyle='#0d0d0d'; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1;
+    ctx.strokeStyle='rgba(200,255,87,0.5)'; ctx.lineWidth=1.5;
+    for (const m of matched) { ctx.beginPath(); ctx.moveTo(m.a.x,m.a.y); ctx.lineTo(m.b.x,m.b.y); ctx.stroke(); }
+    const dot=(x,y,c,r)=>{ ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle=c; ctx.fill(); };
+    for (const c of unmatchedA) dot(c.x,c.y,'rgba(99,180,255,0.9)',5);
+    for (const c of unmatchedB) dot(c.x,c.y,'rgba(255,120,90,0.9)',5);
+    for (const m of matched) { dot(m.a.x,m.a.y,'rgba(200,255,87,0.9)',5); dot(m.b.x,m.b.y,'rgba(200,255,87,0.6)',4); }
+
+    document.getElementById('overlay-header').innerHTML = `
+      Circle Centers
+      <span class="legend-item"><span class="legend-dot" style="background:#c8ff57"></span>Matched pair</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#63b4ff"></span>Annotation 1 only</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#ff785a"></span>Annotation 2 only</span>
+      <span class="legend-item" style="gap:8px"><span style="display:inline-block;width:22px;height:2px;background:#c8ff57;opacity:0.7"></span>Center line</span>`;
+  }
+
+  // ── Compute ──
+  computeBtn.addEventListener('click', () => {
+    errorMsg.style.display = 'none';
+    document.getElementById('result-iou').style.display = 'none';
+    document.getElementById('result-cm').style.display = 'none';
+    document.getElementById('overlay-section').style.display = 'none';
+
+    if (mode === 'mask') {
+      const thresh = parseInt(document.getElementById('threshold').value);
+      const W = Math.max(imgs.a.width, imgs.b.width);
+      const H = Math.max(imgs.a.height, imgs.b.height);
+      const mA = thresholdMask(imgs.a, W, H, thresh);
+      const mB = thresholdMask(imgs.b, W, H, thresh);
+      const {inter,uni,iou} = computeIoU(mA,mB,W*H);
+      if (!uni) { showError('Both masks appear empty. Try lowering the threshold.'); return; }
+      showIoUResults(iou, inter, uni);
+      drawIoUOverlay(mA, mB, W, H, null);
+
+    } else if (mode === 'annotated') {
+      const diffT = parseInt(document.getElementById('diff-thresh-iou').value) * 3;
+      const fillR = parseInt(document.getElementById('fill-radius').value);
+      const W = imgs.baseIou.width, H = imgs.baseIou.height;
+      let mA = dilateMask(diffMask(imgs.baseIou, imgs.annAIou, W, H, diffT), W, H, fillR);
+      let mB = dilateMask(diffMask(imgs.baseIou, imgs.annBIou, W, H, diffT), W, H, fillR);
+      const {inter,uni,iou} = computeIoU(mA,mB,W*H);
+      if (!uni) { showError('No annotation marks detected. Try lowering diff sensitivity.'); return; }
+      showIoUResults(iou, inter, uni);
+      drawIoUOverlay(mA, mB, W, H, imgs.baseIou);
+
+    } else if (mode === 'center') {
+      const diffT = parseInt(document.getElementById('diff-thresh-cm').value) * 3;
+      const maxD  = parseInt(document.getElementById('match-dist').value);
+      const W = imgs.baseCm.width, H = imgs.baseCm.height;
+      const mA = diffMask(imgs.baseCm, imgs.annACm, W, H, diffT);
+      const mB = diffMask(imgs.baseCm, imgs.annBCm, W, H, diffT);
+      const cA = findBlobs(mA, W, H);
+      const cB = findBlobs(mB, W, H);
+      if (!cA.length && !cB.length) { showError('No circles detected in either image. Try lowering diff sensitivity.'); return; }
+      if (!cA.length || !cB.length) { showError(`Circles detected — Annotation 1: ${cA.length}, Annotation 2: ${cB.length}. Try lowering diff sensitivity.`); return; }
+      const {matched, unmatchedA, unmatchedB} = matchCenters(cA, cB, maxD);
+      const matchRate = matched.length / Math.max(cA.length, cB.length);
+      const avgDist = matched.length ? matched.reduce((s,m)=>s+m.d,0)/matched.length : 0;
+      document.getElementById('stat-match').textContent = (matchRate*100).toFixed(1)+'%';
+      document.getElementById('stat-dist').textContent = avgDist.toFixed(1)+'px';
+      document.getElementById('stat-counts').textContent = cA.length+' / '+cB.length;
+      document.getElementById('stat-unmatched').textContent = unmatchedA.length+unmatchedB.length;
+      document.getElementById('match-bar').style.width = (matchRate*100).toFixed(1)+'%';
+      document.getElementById('result-cm').style.display = 'grid';
+      drawCenterOverlay(W, H, matched, unmatchedA, unmatchedB, imgs.baseCm);
+    }
+
+    document.getElementById('overlay-section').style.display = 'block';
+  });
+
+  function showIoUResults(iou, inter, uni) {
+    document.getElementById('stat-iou').textContent = iou.toFixed(3);
+    document.getElementById('stat-intersection').textContent = fmt(inter);
+    document.getElementById('stat-union').textContent = fmt(uni);
+    document.getElementById('iou-bar').style.width = (iou*100).toFixed(1)+'%';
+    document.getElementById('result-iou').style.display = 'grid';
+  }
+
+  function showError(msg) {
+    errorMsg.textContent = msg;
+    errorMsg.style.display = 'block';
+  }
+</script>
+</body>
+</html>
