@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IoU Calculator</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0d0d;
+    --surface: #161616;
+    --surface2: #1f1f1f;
+    --border: #2a2a2a;
+    --text: #f0ede8;
+    --muted: #6b6b6b;
+    --accent: #c8ff57;
+    --accent-dark: #9acc3e;
+    --intersection: rgba(200, 255, 87, 0.55);
+    --a-color: rgba(99, 180, 255, 0.55);
+    --b-color: rgba(255, 120, 90, 0.55);
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 3rem 1.5rem 4rem;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 3rem;
+  }
+
+  header .tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+
+  h1 span {
+    color: var(--accent);
+  }
+
+  header p {
+    margin-top: 0.75rem;
+    color: var(--muted);
+    font-size: 15px;
+    max-width: 420px;
+    line-height: 1.6;
+  }
+
+  .main {
+    width: 100%;
+    max-width: 900px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .drop-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .drop-zone {
+    border: 1.5px dashed var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+    overflow: hidden;
+    min-height: 200px;
+    padding: 1.5rem;
+  }
+
+  .drop-zone.has-image {
+    border-style: solid;
+    border-color: var(--border);
+    padding: 0;
+  }
+
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: #1a1f10;
+  }
+
+  .drop-zone canvas {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    border-radius: 10px;
+  }
+
+  .drop-icon {
+    font-size: 32px;
+    color: var(--muted);
+  }
+
+  .drop-label {
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  .drop-label strong {
+    display: block;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+
+  .drop-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+    z-index: 2;
+  }
+
+  .badge-a { background: rgba(99, 180, 255, 0.2); color: #63b4ff; border: 1px solid rgba(99,180,255,0.3); }
+  .badge-b { background: rgba(255, 120, 90, 0.2); color: #ff785a; border: 1px solid rgba(255,120,90,0.3); }
+
+  .controls {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .slider-row label {
+    font-size: 13px;
+    color: var(--muted);
+    font-family: var(--mono);
+    min-width: 130px;
+  }
+
+  input[type="range"] {
+    flex: 1;
+    appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+  }
+
+  .slider-val {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    min-width: 32px;
+    text-align: right;
+  }
+
+  .compute-btn {
+    background: var(--accent);
+    color: #0d0d0d;
+    border: none;
+    border-radius: 8px;
+    font-family: var(--sans);
+    font-size: 15px;
+    font-weight: 600;
+    padding: 0.75rem 2rem;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    width: 100%;
+    letter-spacing: -0.01em;
+  }
+
+  .compute-btn:hover { background: var(--accent-dark); }
+  .compute-btn:active { transform: scale(0.98); }
+  .compute-btn:disabled { background: var(--surface2); color: var(--muted); cursor: not-allowed; }
+
+  .result-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .stat-card.highlight {
+    border-color: var(--accent);
+    background: #141a0a;
+  }
+
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .stat-val {
+    font-size: 2.25rem;
+    font-weight: 600;
+    font-family: var(--mono);
+    letter-spacing: -0.02em;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .stat-card.highlight .stat-val { color: var(--accent); }
+
+  .iou-bar-wrap {
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    margin-top: 6px;
+    overflow: hidden;
+  }
+
+  .iou-bar {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    width: 0%;
+  }
+
+  .overlay-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .overlay-header {
+    padding: 0.75rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  #overlay-canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 320px;
+    object-fit: contain;
+  }
+
+  .error-msg {
+    display: none;
+    background: rgba(255,80,80,0.1);
+    border: 1px solid rgba(255,80,80,0.3);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-size: 13px;
+    color: #ff8080;
+    font-family: var(--mono);
+  }
+
+  .tip {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    font-family: var(--mono);
+    padding: 0.5rem 0;
+  }
+
+  @media (max-width: 600px) {
+    .drop-row, .result-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="tag">Computer Vision Tool</div>
+  <h1>IoU <span>Calculator</span></h1>
+  <p>Upload two binary masks and instantly compute their Intersection over Union score.</p>
+</header>
+
+<div class="main">
+
+  <div class="drop-row">
+    <div class="drop-zone" id="zone-a">
+      <span class="badge badge-a">MASK A</span>
+      <input type="file" accept="image/*" id="file-a">
+      <div class="drop-icon">⬆</div>
+      <div class="drop-label"><strong>Drop Mask A</strong>Click or drag an image here</div>
+      <canvas id="preview-a" style="display:none; position:absolute; inset:0; width:100%; height:100%; object-fit:contain; border-radius:10px;"></canvas>
+    </div>
+    <div class="drop-zone" id="zone-b">
+      <span class="badge badge-b">MASK B</span>
+      <input type="file" accept="image/*" id="file-b">
+      <div class="drop-icon">⬆</div>
+      <div class="drop-label"><strong>Drop Mask B</strong>Click or drag an image here</div>
+      <canvas id="preview-b" style="display:none; position:absolute; inset:0; width:100%; height:100%; object-fit:contain; border-radius:10px;"></canvas>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="slider-row">
+      <label>threshold</label>
+      <input type="range" id="threshold" min="0" max="255" value="128" step="1">
+      <span class="slider-val" id="threshold-val">128</span>
+    </div>
+    <div class="tip">Pixels above threshold = white (foreground). Adjust if your masks look wrong.</div>
+  </div>
+
+  <div class="error-msg" id="error-msg"></div>
+
+  <button class="compute-btn" id="compute-btn" disabled>Upload both masks to compute IoU</button>
+
+  <div class="result-row" id="result-row" style="display:none">
+    <div class="stat-card highlight">
+      <div class="stat-label">IoU Score</div>
+      <div class="stat-val" id="stat-iou">—</div>
+      <div class="iou-bar-wrap"><div class="iou-bar" id="iou-bar"></div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Intersection</div>
+      <div class="stat-val" id="stat-intersection">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Union</div>
+      <div class="stat-val" id="stat-union">—</div>
+    </div>
+  </div>
+
+  <div class="overlay-section" id="overlay-section" style="display:none">
+    <div class="overlay-header">
+      Overlap Visualization
+      <span class="legend-item"><span class="legend-dot" style="background:rgba(99,180,255,0.7)"></span>Mask A only</span>
+      <span class="legend-item"><span class="legend-dot" style="background:rgba(255,120,90,0.7)"></span>Mask B only</span>
+      <span class="legend-item"><span class="legend-dot" style="background:rgba(200,255,87,0.9)"></span>Intersection</span>
+    </div>
+    <canvas id="overlay-canvas"></canvas>
+  </div>
+
+</div>
+
+<script>
+  const fileA = document.getElementById('file-a');
+  const fileB = document.getElementById('file-b');
+  const zoneA = document.getElementById('zone-a');
+  const zoneB = document.getElementById('zone-b');
+  const previewA = document.getElementById('preview-a');
+  const previewB = document.getElementById('preview-b');
+  const threshSlider = document.getElementById('threshold');
+  const threshVal = document.getElementById('threshold-val');
+  const computeBtn = document.getElementById('compute-btn');
+  const errorMsg = document.getElementById('error-msg');
+  const resultRow = document.getElementById('result-row');
+  const overlaySection = document.getElementById('overlay-section');
+  const overlayCanvas = document.getElementById('overlay-canvas');
+
+  let imgA = null, imgB = null;
+
+  threshSlider.addEventListener('input', () => {
+    threshVal.textContent = threshSlider.value;
+    if (imgA) drawPreview(imgA, previewA, zoneA);
+    if (imgB) drawPreview(imgB, previewB, zoneB);
+  });
+
+  function loadImage(file, callback) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => callback(img);
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function drawPreview(img, canvas, zone) {
+    const W = zone.clientWidth || 300;
+    const H = zone.clientHeight || 200;
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    const scale = Math.min(W / img.width, H / img.height);
+    const dw = img.width * scale;
+    const dh = img.height * scale;
+    const dx = (W - dw) / 2;
+    const dy = (H - dh) / 2;
+    ctx.clearRect(0, 0, W, H);
+    ctx.drawImage(img, dx, dy, dw, dh);
+    canvas.style.display = 'block';
+    zone.querySelector('.drop-icon').style.display = 'none';
+    zone.querySelector('.drop-label').style.display = 'none';
+  }
+
+  function handleFile(file, which) {
+    loadImage(file, img => {
+      if (which === 'a') {
+        imgA = img;
+        drawPreview(img, previewA, zoneA);
+      } else {
+        imgB = img;
+        drawPreview(img, previewB, zoneB);
+      }
+      updateBtn();
+    });
+  }
+
+  fileA.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0], 'a'); });
+  fileB.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0], 'b'); });
+
+  ['dragover','dragleave','drop'].forEach(ev => {
+    [zoneA, zoneB].forEach(zone => zone.addEventListener(ev, e => {
+      e.preventDefault();
+      if (ev === 'dragover') zone.classList.add('drag-over');
+      else zone.classList.remove('drag-over');
+      if (ev === 'drop' && e.dataTransfer.files[0]) {
+        handleFile(e.dataTransfer.files[0], zone === zoneA ? 'a' : 'b');
+      }
+    }));
+  });
+
+  function updateBtn() {
+    if (imgA && imgB) {
+      computeBtn.disabled = false;
+      computeBtn.textContent = 'Compute IoU →';
+    }
+  }
+
+  function getPixelMask(img, W, H, thresh) {
+    const offscreen = document.createElement('canvas');
+    offscreen.width = W;
+    offscreen.height = H;
+    const ctx = offscreen.getContext('2d');
+    ctx.drawImage(img, 0, 0, W, H);
+    const data = ctx.getImageData(0, 0, W, H).data;
+    const mask = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) {
+      const r = data[i * 4];
+      const g = data[i * 4 + 1];
+      const b = data[i * 4 + 2];
+      const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+      mask[i] = gray > thresh ? 1 : 0;
+    }
+    return mask;
+  }
+
+  function formatPx(n) {
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+    return n.toString();
+  }
+
+  computeBtn.addEventListener('click', () => {
+    errorMsg.style.display = 'none';
+    const thresh = parseInt(threshSlider.value);
+    const W = Math.max(imgA.width, imgB.width);
+    const H = Math.max(imgA.height, imgB.height);
+
+    const maskA = getPixelMask(imgA, W, H, thresh);
+    const maskB = getPixelMask(imgB, W, H, thresh);
+
+    let intersection = 0, union = 0;
+    for (let i = 0; i < W * H; i++) {
+      if (maskA[i] && maskB[i]) intersection++;
+      if (maskA[i] || maskB[i]) union++;
+    }
+
+    if (union === 0) {
+      errorMsg.textContent = 'Both masks appear empty at this threshold. Try lowering the threshold value.';
+      errorMsg.style.display = 'block';
+      return;
+    }
+
+    const iou = intersection / union;
+
+    document.getElementById('stat-iou').textContent = iou.toFixed(3);
+    document.getElementById('stat-intersection').textContent = formatPx(intersection);
+    document.getElementById('stat-union').textContent = formatPx(union);
+    document.getElementById('iou-bar').style.width = (iou * 100).toFixed(1) + '%';
+
+    resultRow.style.display = 'grid';
+
+    drawOverlay(maskA, maskB, W, H);
+    overlaySection.style.display = 'block';
+  });
+
+  function drawOverlay(maskA, maskB, W, H) {
+    overlayCanvas.width = W;
+    overlayCanvas.height = H;
+    const ctx = overlayCanvas.getContext('2d');
+    const out = ctx.createImageData(W, H);
+    for (let i = 0; i < W * H; i++) {
+      const a = maskA[i], b = maskB[i];
+      const idx = i * 4;
+      if (a && b) {
+        out.data[idx] = 200; out.data[idx+1] = 255; out.data[idx+2] = 87; out.data[idx+3] = 230;
+      } else if (a) {
+        out.data[idx] = 99; out.data[idx+1] = 180; out.data[idx+2] = 255; out.data[idx+3] = 180;
+      } else if (b) {
+        out.data[idx] = 255; out.data[idx+1] = 120; out.data[idx+2] = 90; out.data[idx+3] = 180;
+      } else {
+        out.data[idx] = 20; out.data[idx+1] = 20; out.data[idx+2] = 20; out.data[idx+3] = 255;
+      }
+    }
+    ctx.putImageData(out, 0, 0);
+  }
+</script>
+</body>
+</html>
